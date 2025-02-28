@@ -1,22 +1,38 @@
 package lang
 
 import (
+	"bytes"
 	"reflect"
+	"slices"
 	"strconv"
-	"strings"
 )
+
+type syncMutex interface {
+	Lock()
+	Unlock()
+}
 
 type writer interface {
 	Write(p []byte) (n int, err error)
 }
 
-type Lang struct {
-	defaultLang   string   // default "en"
-	langSupported []string // eg: "es", "en", "pt", "fr"
-	translations  map[string]map[string]string
-	out           strings.Builder
-	err           errMessage
+// defaultSync implements syncMutex interface
+type defaultSync struct{}
 
+func (d defaultSync) Lock()   {}
+func (d defaultSync) Unlock() {}
+
+// defaultWriter implements writer interface
+type defaultWriter struct{}
+
+func (d defaultWriter) Write(p []byte) (n int, err error) { return len(p), nil }
+
+type Lang struct {
+	defaultLang   string
+	langSupported []string
+	translations  map[string]map[string]string
+	err           errMessage
+	sync          syncMutex
 	writer
 }
 
@@ -27,23 +43,32 @@ type errMessage struct {
 // dictionary
 var D dictionary
 
-func New(w writer) *Lang {
-
+func New(params ...any) *Lang {
 	l := Lang{
 		defaultLang:   "en",
-		langSupported: []string{},
+		langSupported: []string{"en"},
 		translations: map[string]map[string]string{
 			"en": {}, // do not complete manually!
 		},
-		err: errMessage{
-			message: "",
-		},
+		err:    errMessage{message: ""},
+		sync:   defaultSync{},
+		writer: defaultWriter{},
+	}
+
+	// Process variadic parameters
+	for _, param := range params {
+		switch v := param.(type) {
+		case syncMutex:
+			l.sync = v
+		case writer:
+			l.writer = v
+		}
 	}
 
 	v := reflect.ValueOf(&D).Elem()
 	t := v.Type()
 
-	// Parsear las etiquetas de un campo.
+	// Parser las etiquetas de un campo.
 	field := t.Field(0)
 	for key := range parseTag(field.Tag) {
 		// fmt.Printf("  Etiqueta %s: %s\n", key, value)
@@ -84,7 +109,9 @@ func New(w writer) *Lang {
 }
 
 // Set set the language eg: "es", "en", "pt", "fr"
-func (l *Lang) SetLanguage(language string) error {
+func (l *Lang) SetDefaultLanguage(language string) error {
+	l.sync.Lock()
+	defer l.sync.Unlock()
 
 	if _, ok := l.translations[language]; !ok {
 		return l.Err(D.Language, language, D.NotSupported)
@@ -95,10 +122,32 @@ func (l *Lang) SetLanguage(language string) error {
 }
 
 // T returns the translation of the given arguments.
-// eg: R.T("hello", "world") returns "hello world"
-func (l Lang) T(args ...interface{}) string {
-	l.out.Reset()
+// h (handler reference) eg: h.T("hello", "world", ":", 2021) returns "hello world: 2021"
+func (l Lang) T(args ...any) string {
+	l.sync.Lock()
+	defer l.sync.Unlock()
+
+	var out bytes.Buffer
 	var space string
+
+	// Check if we have at least one argument
+	if len(args) == 0 {
+		return ""
+	}
+	// Check if first argument is a string and a supported language
+	targetLang := l.defaultLang
+	if firstArg, ok := args[0].(string); ok {
+		// fmt.Println("firs arg", firstArg, "l.langSupported", l.langSupported)
+		// Check if it's a supported language
+		if slices.Contains(l.langSupported, firstArg) {
+			// fmt.Println("contiene?", firstArg)
+			targetLang = firstArg
+			args = args[1:] // Remove the language argument from args
+			// fmt.Println("currents args", args)
+		}
+	}
+
+	// Process remaining arguments
 	for argNumber, arg := range args {
 		switch v := arg.(type) {
 		case string:
@@ -106,59 +155,56 @@ func (l Lang) T(args ...interface{}) string {
 				continue
 			}
 
-			if trans, ok := l.translations[l.defaultLang][v]; ok {
-				l.out.WriteString(space + trans)
+			if trans, ok := l.translations[targetLang][v]; ok {
+				out.WriteString(space + trans)
 			} else {
-				l.out.WriteString(space + v)
+				out.WriteString(space + v)
 			}
 		case []string:
 			for _, s := range v {
 				if s == "" {
 					continue
 				}
-				if trans, ok := l.translations[l.defaultLang][s]; ok {
-					l.out.WriteString(space + trans)
+				if trans, ok := l.translations[targetLang][s]; ok {
+					out.WriteString(space + trans)
 				} else {
-					l.out.WriteString(space + s)
+					out.WriteString(space + s)
 				}
 				space = " "
 			}
 		case rune:
-
 			if v == ':' {
-				l.out.WriteString(":")
+				out.WriteString(":")
 				continue
 			}
-
-			l.out.WriteString(space + string(v))
+			out.WriteString(space + string(v))
 		case int:
-			l.out.WriteString(space + strconv.Itoa(v))
+			out.WriteString(space + strconv.Itoa(v))
 		case float64:
-			l.out.WriteString(space + strconv.FormatFloat(v, 'f', -1, 64))
+			out.WriteString(space + strconv.FormatFloat(v, 'f', -1, 64))
 		case bool:
-			l.out.WriteString(space + strconv.FormatBool(v))
+			out.WriteString(space + strconv.FormatBool(v))
 		case error:
-			l.out.WriteString(space + v.Error())
+			out.WriteString(space + v.Error())
 		default:
-			l.out.WriteString(space + D.Argument + ": " + strconv.Itoa(argNumber) + " " + D.Unknown)
+			out.WriteString(space + D.Argument + ": " + strconv.Itoa(argNumber) + " " + D.Unknown)
 		}
 		space = " "
 	}
-	return l.out.String()
+	return out.String()
 }
 
 func (l Lang) Err(args ...any) error {
-	l.T(args...)
-	l.err.message = l.out.String()
+	l.err.message = l.T(args...)
 	return l.err
+}
+
+func (e errMessage) Error() string {
+	return e.message
 }
 
 func (l Lang) Print(args ...any) {
 	if l.writer != nil {
 		l.writer.Write([]byte(l.T(args...)))
 	}
-}
-
-func (e errMessage) Error() string {
-	return e.message
 }
