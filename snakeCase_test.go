@@ -1,9 +1,7 @@
-package lang_test
+package lang
 
 import (
 	"testing"
-
-	"github.com/cdvelop/lang"
 )
 
 func TestSnakeCase(t *testing.T) {
@@ -23,7 +21,7 @@ func TestSnakeCase(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.input, func(t *testing.T) {
 
-			got := lang.SnakeCase(tc.input)
+			got := snakeCase(tc.input)
 			if got != tc.want {
 				t.Fatalf("snakeCase(%q) = %q; want %q", tc.input, got, tc.want)
 			}

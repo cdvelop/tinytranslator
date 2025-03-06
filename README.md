@@ -19,19 +19,17 @@ package main
 
 import (
     "fmt"
-    "github.com/cdvelop/lang"
+   . "github.com/cdvelop/lang"
 )
 
 func main() {
-    // Initialize translator
-    translator := lang.New()
-    
+    l := New()
     // Set default language to Spanish
-    translator.SetDefaultLanguage("es")
+    l.SetDefaultLanguage("es")
     
     // Get translation
-    msg := translator.T(lang.D.Language, "test", lang.D.NotSupported)
-    fmt.Println(msg) // Output: idioma test no soportado
+    msg := l.T(D.Language, D.NotSupported)
+    fmt.Println(msg) // Output: idioma no soportado
 }
 ```
 

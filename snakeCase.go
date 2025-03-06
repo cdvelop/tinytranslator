@@ -1,10 +1,5 @@
 package lang
 
-import (
-	"strings"
-	"unicode"
-)
-
 // snakeCase converts a string to snake_case format with optional separator.
 // If no separator is provided, underscore "_" is used as default.
 // Example:
@@ -13,24 +8,30 @@ import (
 //	Input: "PascalCase", "-" -> Output: "pascal-case"
 //	Input: "APIResponse" -> Output: "api_response"
 //	Input: "user123Name", "." -> Output: "user123.name"
-func SnakeCase(str string, sep ...string) string {
+func snakeCase(str string, sep ...string) string {
 	separator := "_"
 	if len(sep) > 0 {
 		separator = sep[0]
 	}
-	var out string
+
+	var out []byte
 	for i, r := range str {
-		if unicode.IsUpper(r) {
-			// If it's uppercase and not the first character, add separator
-			if i > 0 && (unicode.IsLower(rune(str[i-1])) || unicode.IsDigit(rune(str[i-1]))) {
-				out += separator
+		if r >= 'A' && r <= 'Z' { // IsUpper - solo ASCII
+			// Si es mayúscula y no es el primer carácter
+			if i > 0 {
+				prev := rune(str[i-1])
+				// Si el carácter anterior es minúscula o dígito
+				if (prev >= 'a' && prev <= 'z') || (prev >= '0' && prev <= '9') {
+					out = append(out, separator...)
+				}
 			}
-			// Convert uppercase to lowercase
-			out += strings.ToLower(string(r))
+			// Convertir a minúscula (diferencia ASCII entre 'A' y 'a' es 32)
+			out = append(out, byte(r+32))
 		} else {
-			// If it's not uppercase, simply add it
-			out += string(r)
+			// Si no es mayúscula, simplemente añadirla
+			out = append(out, byte(r))
 		}
 	}
-	return out
+
+	return string(out)
 }

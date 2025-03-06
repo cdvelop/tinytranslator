@@ -3,7 +3,6 @@ package lang
 import (
 	"bytes"
 	"reflect"
-	"slices"
 	"strconv"
 )
 
@@ -27,10 +26,22 @@ type defaultWriter struct{}
 
 func (d defaultWriter) Write(p []byte) (n int, err error) { return len(p), nil }
 
+// translation represents a single translation entry
+type translation struct {
+	Key    string   // Original snake case key
+	Values []string // Values in different languages
+}
+
+// language represents a supported language
+type language struct {
+	Code  string // eg: "en", "es"
+	Index int    // Index in the translations array
+}
+
 type Lang struct {
 	defaultLang   string
-	langSupported []string
-	translations  map[string]map[string]string
+	langSupported []language
+	translations  []translation
 	err           errMessage
 	sync          syncMutex
 	writer
@@ -44,54 +55,68 @@ type errMessage struct {
 var D dictionary
 
 func New(params ...any) *Lang {
-	l := Lang{
-		defaultLang:   "en",
-		langSupported: []string{"en"},
-		translations: map[string]map[string]string{
-			"en": {}, // do not complete manually!
-		},
-		err:    errMessage{message: ""},
-		sync:   defaultSync{},
-		writer: defaultWriter{},
+	// Define supported languages
+	supportedLangs := []language{
+		{Code: "en", Index: 0},
 	}
 
+	l := Lang{
+		defaultLang:   "en",
+		langSupported: supportedLangs,
+		translations:  make([]translation, 0, 100), // Pre-allocate space
+		err:           errMessage{message: ""},
+		sync:          defaultSync{},
+		writer:        defaultWriter{},
+	}
+
+	// Process dictionary tags to extract supported languages
 	v := reflect.ValueOf(&D).Elem()
 	t := v.Type()
 
-	// Parser las etiquetas de un campo.
-	field := t.Field(0)
-	for key := range parseTag(field.Tag) {
-		// fmt.Printf("  Etiqueta %s: %s\n", key, value)
-		l.langSupported = append(l.langSupported, key)
+	// Parse tags from first field to get language codes
+	if t.NumField() > 0 {
+		field := t.Field(0)
+		langTags := parseTag(field.Tag)
+
+		// Initialize language support
+		for langCode := range langTags {
+			if langCode != "en" { // "en" already added
+				l.langSupported = append(l.langSupported, language{
+					Code:  langCode,
+					Index: len(l.langSupported),
+				})
+			}
+		}
 	}
 
-	// initialize translations map
-	for _, lang := range l.langSupported {
-		l.translations[lang] = map[string]string{}
-	}
-
+	// Process dictionary fields and build translations
 	for i := range v.NumField() {
 		field := v.Field(i)
 		dbFieldType := t.Field(i)
 
 		if field.CanSet() {
 			// Convert field name to: snake case
-			snakeCaseName := SnakeCase(dbFieldType.Name)
+			snakeCaseName := snakeCase(dbFieldType.Name)
 			// Assign field name to dictionary structure
 			field.SetString(snakeCaseName)
-			// Separate words
-			separateName := SnakeCase(dbFieldType.Name, " ")
-			// Update translations map to default language "en"
-			l.translations[l.defaultLang][snakeCaseName] = separateName
 
-			// update translations map to other languages
-			for _, langSupport := range l.langSupported {
-				// Get tags for other languages "es","pt"
-				transSupported := dbFieldType.Tag.Get(langSupport)
-				if transSupported != "" {
-					l.translations[langSupport][snakeCaseName] = transSupported
-				}
+			// Create new translation entry
+			trans := translation{
+				Key:    snakeCaseName,
+				Values: make([]string, len(l.langSupported)),
 			}
+
+			// Set default translation (English)
+			separateName := snakeCase(dbFieldType.Name, " ")
+			trans.Values[0] = separateName
+
+			// Add translations for other languages
+			for _, lang := range l.langSupported[1:] {
+				value := dbFieldType.Tag.Get(lang.Code)
+				trans.Values[lang.Index] = value
+			}
+
+			l.translations = append(l.translations, trans)
 		}
 	}
 
@@ -105,16 +130,16 @@ func New(params ...any) *Lang {
 		}
 	}
 
-	// fmt.Println("dictionary initialized", R)
 	return &l
 }
 
-// Set set the language eg: "es", "en", "pt", "fr"
+// SetDefaultLanguage sets the default language
 func (l *Lang) SetDefaultLanguage(language string) error {
 	l.sync.Lock()
 	defer l.sync.Unlock()
 
-	if _, ok := l.translations[language]; !ok {
+	langIndex := l.FindLanguageIndex(language)
+	if langIndex < 0 {
 		return l.Err(D.Language, language, D.NotSupported)
 	}
 
@@ -123,7 +148,6 @@ func (l *Lang) SetDefaultLanguage(language string) error {
 }
 
 // T returns the translation of the given arguments.
-// h (handler reference) eg: h.T("hello", "world", ":", 2021) returns "hello world: 2021"
 func (l Lang) T(args ...any) string {
 	l.sync.Lock()
 	defer l.sync.Unlock()
@@ -135,16 +159,15 @@ func (l Lang) T(args ...any) string {
 	if len(args) == 0 {
 		return ""
 	}
+
 	// Check if first argument is a string and a supported language
-	targetLang := l.defaultLang
+	targetLangIndex := l.FindLanguageIndex(l.defaultLang)
 	if firstArg, ok := args[0].(string); ok {
-		// fmt.Println("firs arg", firstArg, "l.langSupported", l.langSupported)
-		// Check if it's a supported language
-		if slices.Contains(l.langSupported, firstArg) {
-			// fmt.Println("contiene?", firstArg)
-			targetLang = firstArg
-			args = args[1:] // Remove the language argument from args
-			// fmt.Println("currents args", args)
+		// Check if it's a supported language code
+		langIndex := l.FindLanguageIndex(firstArg)
+		if langIndex >= 0 {
+			targetLangIndex = langIndex
+			args = args[1:] // Remove the language argument
 		}
 	}
 
@@ -155,24 +178,16 @@ func (l Lang) T(args ...any) string {
 			if v == "" {
 				continue
 			}
-
-			if trans, ok := l.translations[targetLang][v]; ok {
-				out.WriteString(space + trans)
-			} else {
-				out.WriteString(space + v)
-			}
+			out.WriteString(space + l.FindTranslation(v, targetLangIndex))
 		case []string:
 			for _, s := range v {
 				if s == "" {
 					continue
 				}
-				if trans, ok := l.translations[targetLang][s]; ok {
-					out.WriteString(space + trans)
-				} else {
-					out.WriteString(space + s)
-				}
+				out.WriteString(space + l.FindTranslation(s, targetLangIndex))
 				space = " "
 			}
+		// Other cases remain the same
 		case rune:
 			if v == ':' {
 				out.WriteString(":")
@@ -188,7 +203,9 @@ func (l Lang) T(args ...any) string {
 		case error:
 			out.WriteString(space + v.Error())
 		default:
-			out.WriteString(space + D.Argument + ": " + strconv.Itoa(argNumber) + " " + D.Unknown)
+			out.WriteString(space + l.FindTranslation("argument", targetLangIndex) +
+				": " + strconv.Itoa(argNumber) + " " +
+				l.FindTranslation("unknown", targetLangIndex))
 		}
 		space = " "
 	}
@@ -211,5 +228,37 @@ func (l Lang) Print(args ...any) {
 }
 
 func (l Lang) GetSupportedLanguages() []string {
-	return l.langSupported
+	var langs []string
+	for _, lang := range l.langSupported {
+		langs = append(langs, lang.Code)
+	}
+	return langs
+}
+
+// FindLanguageIndex returns the index of a language or -1 if not found
+func (l *Lang) FindLanguageIndex(code string) int {
+	for _, lang := range l.langSupported {
+		if lang.Code == code {
+			return lang.Index
+		}
+	}
+	return -1
+}
+
+// FindTranslation returns the translation for a key in the specified language
+func (l *Lang) FindTranslation(key string, langIndex int) string {
+	for _, trans := range l.translations {
+		if trans.Key == key {
+			if langIndex >= 0 && langIndex < len(trans.Values) {
+				if trans.Values[langIndex] != "" {
+					return trans.Values[langIndex]
+				}
+				// Fallback to default language if translation is empty
+				defIndex := l.FindLanguageIndex(l.defaultLang)
+				return trans.Values[defIndex]
+			}
+			break
+		}
+	}
+	return key
 }
