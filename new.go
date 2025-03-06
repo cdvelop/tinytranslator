@@ -40,7 +40,7 @@ type errMessage struct {
 	message string
 }
 
-// dictionary
+// global dictionary of translations
 var D dictionary
 
 func New(params ...any) *Lang {
@@ -53,16 +53,6 @@ func New(params ...any) *Lang {
 		err:    errMessage{message: ""},
 		sync:   defaultSync{},
 		writer: defaultWriter{},
-	}
-
-	// Process variadic parameters
-	for _, param := range params {
-		switch v := param.(type) {
-		case syncMutex:
-			l.sync = v
-		case writer:
-			l.writer = v
-		}
 	}
 
 	v := reflect.ValueOf(&D).Elem()
@@ -104,6 +94,17 @@ func New(params ...any) *Lang {
 			}
 		}
 	}
+
+	// Process variadic parameters
+	for _, param := range params {
+		switch v := param.(type) {
+		case syncMutex:
+			l.sync = v
+		case writer:
+			l.writer = v
+		}
+	}
+
 	// fmt.Println("dictionary initialized", R)
 	return &l
 }
@@ -207,4 +208,8 @@ func (l Lang) Print(args ...any) {
 	if l.writer != nil {
 		l.writer.Write([]byte(l.T(args...)))
 	}
+}
+
+func (l Lang) GetSupportedLanguages() []string {
+	return l.langSupported
 }

@@ -4,7 +4,7 @@ import (
 	"sync"
 	"testing"
 
-	. "github.com/cesarsoliscaro/lang"
+	. "github.com/cdvelop/lang"
 )
 
 // Test that the dictionary D has been initialized with snake_case values.

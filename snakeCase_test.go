@@ -3,7 +3,7 @@ package lang_test
 import (
 	"testing"
 
-	"github.com/cesarsoliscaro/lang"
+	"github.com/cdvelop/lang"
 )
 
 func TestSnakeCase(t *testing.T) {
