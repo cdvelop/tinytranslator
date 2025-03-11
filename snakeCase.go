@@ -1,4 +1,4 @@
-package lang
+package tinytranslator
 
 // snakeCase converts a string to snake_case format with optional separator.
 // If no separator is provided, underscore "_" is used as default.

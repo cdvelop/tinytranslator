@@ -1,4 +1,4 @@
-package lang
+package tinytranslator
 
 import (
 	"bytes"
@@ -6,20 +6,9 @@ import (
 	"strconv"
 )
 
-type syncMutex interface {
-	Lock()
-	Unlock()
-}
-
 type writer interface {
 	Write(p []byte) (n int, err error)
 }
-
-// defaultSync implements syncMutex interface
-type defaultSync struct{}
-
-func (d defaultSync) Lock()   {}
-func (d defaultSync) Unlock() {}
 
 // defaultWriter implements writer interface
 type defaultWriter struct{}
@@ -43,7 +32,6 @@ type Lang struct {
 	langSupported []language
 	translations  []translation
 	err           errMessage
-	sync          syncMutex
 	writer
 }
 
@@ -54,7 +42,7 @@ type errMessage struct {
 // global dictionary of translations
 var D dictionary
 
-func New(params ...any) *Lang {
+func NewTranslationEngine(params ...any) *Lang {
 	// Define supported languages
 	supportedLangs := []language{
 		{Code: "en", Index: 0},
@@ -65,7 +53,6 @@ func New(params ...any) *Lang {
 		langSupported: supportedLangs,
 		translations:  make([]translation, 0, 100), // Pre-allocate space
 		err:           errMessage{message: ""},
-		sync:          defaultSync{},
 		writer:        defaultWriter{},
 	}
 
@@ -123,8 +110,8 @@ func New(params ...any) *Lang {
 	// Process variadic parameters
 	for _, param := range params {
 		switch v := param.(type) {
-		case syncMutex:
-			l.sync = v
+		case string:
+			l.SetDefaultLanguage(v)
 		case writer:
 			l.writer = v
 		}
@@ -135,8 +122,6 @@ func New(params ...any) *Lang {
 
 // SetDefaultLanguage sets the default language
 func (l *Lang) SetDefaultLanguage(language string) error {
-	l.sync.Lock()
-	defer l.sync.Unlock()
 
 	langIndex := l.FindLanguageIndex(language)
 	if langIndex < 0 {
@@ -149,8 +134,6 @@ func (l *Lang) SetDefaultLanguage(language string) error {
 
 // T returns the translation of the given arguments.
 func (l Lang) T(args ...any) string {
-	l.sync.Lock()
-	defer l.sync.Unlock()
 
 	var out bytes.Buffer
 	var space string

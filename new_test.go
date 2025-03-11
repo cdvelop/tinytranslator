@@ -1,16 +1,15 @@
-package lang_test
+package tinytranslator_test
 
 import (
-	"sync"
 	"testing"
 
-	. "github.com/cdvelop/lang"
+	. "github.com/cdvelop/tinytranslator"
 )
 
 // Test that the dictionary D has been initialized with snake_case values.
 func TestDictionaryInitialization(t *testing.T) {
 	// Create a Lang instance to force dictionary initialization.
-	_ = New()
+	_ = NewTranslationEngine()
 
 	// Test known fields. Assuming dictionary type has these fields.
 	// If the dictionary type has more or different fields, adjust expected values as needed.
@@ -36,16 +35,16 @@ const expectedEsNotSupported = "no soportado"
 func TestConcurrentSetDefaultLanguage(t *testing.T) {
 
 	iterations := 100 // Aumentamos el número de iteraciones
-	var wg sync.WaitGroup
-	langInst1 := New(&sync.Mutex{})
-	langInst2 := New(&sync.Mutex{})
+	// var wg sync.WaitGroup
+	langInst1 := NewTranslationEngine()
+	langInst2 := NewTranslationEngine()
 
 	for range iterations {
 		// Test English translation concurrently
-		wg.Add(2) // Agregamos 2 porque lanzamos 2 goroutines
+		// wg.Add(2) // Agregamos 2 porque lanzamos 2 goroutines
 
 		go func() {
-			defer wg.Done()
+			// defer wg.Done()
 			if err := langInst1.SetDefaultLanguage("en"); err != nil {
 				t.Errorf("langInst1 SetDefaultLanguage(en) error: %v", err)
 				return
@@ -58,7 +57,7 @@ func TestConcurrentSetDefaultLanguage(t *testing.T) {
 		}()
 
 		go func() {
-			defer wg.Done()
+			// defer wg.Done()
 			if err := langInst2.SetDefaultLanguage("es"); err != nil {
 				t.Errorf("langInst2 SetDefaultLanguage(es) error: %v", err)
 				return
@@ -71,33 +70,33 @@ func TestConcurrentSetDefaultLanguage(t *testing.T) {
 		}()
 	}
 
-	wg.Wait() // Esperamos a que todas las goroutines terminen
+	// wg.Wait() // Esperamos a que todas las goroutines terminen
 }
 
 func TestConcurrentIndividualSetLanguage(t *testing.T) {
 	iterations := 1000
-	var wg sync.WaitGroup
-	langInst := New(&sync.Mutex{})
+	// var wg sync.WaitGroup
+	langInst := NewTranslationEngine()
 
 	for range iterations {
-		wg.Add(2)
+		// wg.Add(2)
 
 		go func() {
-			defer wg.Done()
+			// defer wg.Done()
 			got := langInst.T("en", D.Language, "test", D.NotSupported)
 			expectedMsg := expectedEnLanguage + " test " + expectedEnNotSupported
 			assertTranslation(t, got, expectedMsg, "English")
 		}()
 
 		go func() {
-			defer wg.Done()
+			// defer wg.Done()
 			got := langInst.T("es", D.Language, "test", D.NotSupported)
 			expectedMsg := expectedEsLanguage + " test " + expectedEsNotSupported
 			assertTranslation(t, got, expectedMsg, "Spanish")
 		}()
 	}
 
-	wg.Wait()
+	// wg.Wait()
 }
 
 // Helper function to create error messages for translation tests

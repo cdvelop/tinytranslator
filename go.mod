@@ -1,3 +1,3 @@
-module github.com/cdvelop/lang
+module github.com/cdvelop/tinytranslator
 
 go 1.22.0

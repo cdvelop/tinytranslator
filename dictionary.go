@@ -1,4 +1,4 @@
-package lang
+package tinytranslator
 
 type dictionary struct {
 	Address              string `es:"dirección" pt:"endereço" fr:"adresse" ru:"адрес" de:"Adresse" it:"indirizzo" hi:"पता" bn:"ঠিকানা" id:"alamat" ar:"عنوان" ur:"پتہ" zh:"地址"`

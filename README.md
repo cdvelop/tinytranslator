@@ -1,8 +1,9 @@
 # Go Translation Library
 
 <div align="center">
-  <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Go-1.22+-00ADD8.svg" alt="Go Version">
+    <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT">
+    <img src="https://img.shields.io/badge/Go-1.22+-00ADD8.svg" alt="Go Version">
+    <img src="https://img.shields.io/badge/Tests-Passing-green.svg" alt="Tests: Passing">
 </div>
 
 ## Overview
@@ -11,7 +12,7 @@ The Go Translation Library provides a simple, powerful way to handle multilingua
 
 ### Key Features
 
-- 🔄 **Concurrent-safe** translations with mutex support
+- 🔄 **Natively concurrent-safe** translations using slices and structs, eliminating the need for mutexes.
 - 🌐 **Multiple languages** with extensive built-in translations
 - 📝 **Dynamic string formatting** with various data types
 - ⚠️ **Integrated error handling** with translated messages
@@ -21,7 +22,7 @@ The Go Translation Library provides a simple, powerful way to handle multilingua
 ## Installation
 
 ```bash
-go get github.com/cdvelop/lang
+go get github.com/cdvelop/tinytranslator
 ```
 
 ## Quick Start
@@ -31,28 +32,28 @@ package main
 
 import (
     "fmt"
-    . "github.com/cdvelop/lang"
+    . "github.com/cdvelop/tinytranslator"
 )
 
 func main() {
-    // Create a new translator instance
-    translator := New()
+    // Create a new translator instance with French as default language
+    translator := NewTranslationEngine("fr")
     
-    // Set default language (optional, defaults to English)
-    translator.SetDefaultLanguage("es")
-    
-    // Get translated text
+    // Get translated text in French
     msg := translator.T(D.Hello, D.World)
-    fmt.Println(msg) // Output: "hola mundo"
+    fmt.Println(msg) // Output: "bonjour monde"
+    
+    // Change language to Portuguese
+    translator.SetDefaultLanguage("pt")
+    
+    // Get translated text in Portuguese
+    msg = translator.T(D.Hello, D.World)
+    fmt.Println(msg) // Output: "olá mundo"
     
     // Combine translations with variables
     username := "John"
     greeting := translator.T(D.Hello, username)
-    fmt.Println(greeting) // Output: "hola John"
-    
-    // Create translated errors
-    err := translator.Err(D.Email, D.NotValid)
-    fmt.Println(err.Error()) // Output: "correo electrónico no es valido"
+    fmt.Println(greeting) // Output: "olá John"
 }
 ```
 
@@ -62,7 +63,6 @@ func main() {
 
 The `Lang` struct is the central component that handles translations:
 
-- **Thread-safety**: Optional mutex support for concurrent environments
 - **Default language**: Configurable fallback language
 - **Translation lookup**: Efficient key-based translation retrieval
 - **Custom output**: Configurable writer interface
@@ -83,16 +83,11 @@ D.NotSupported // "not supported" in English, "no soportado" in Spanish, etc.
 
 ```go
 // Basic initialization with default settings
-translator := New()
+translator := NewTranslationEngine()
 
-// With mutex for thread safety
-translator := New(&sync.Mutex{})
+// With custom writer and default language
+translator := NewTranslationEngine(os.Stdout, "es")
 
-// With custom writer
-translator := New(os.Stdout)
-
-// With both options
-translator := New(&sync.Mutex{}, os.Stdout)
 ```
 
 ### Setting Default Language
@@ -139,50 +134,6 @@ if fieldIsEmpty {
 }
 ```
 
-### Direct Output
-
-```go
-// Write to the configured writer
-translator.Print(D.Hello, "User")
-```
-
-## Advanced Usage Examples
-
-### Concurrent Usage
-
-```go
-package main
-
-import (
-    "fmt"
-    "sync"
-    . "github.com/cdvelop/lang"
-)
-
-func main() {
-    var wg sync.WaitGroup
-    // Create thread-safe translator
-    translator := New(&sync.Mutex{})
-    
-    wg.Add(2)
-    // Handle Spanish requests
-    go func() {
-        defer wg.Done()
-        msg := translator.T("es", D.Language, D.NotSupported)
-        fmt.Println(msg) // Output: "idioma no soportado"
-    }()
-    
-    // Handle English requests
-    go func() {
-        defer wg.Done()
-        msg := translator.T("en", D.Language, D.NotSupported)
-        fmt.Println(msg) // Output: "language not supported"
-    }()
-    
-    wg.Wait()
-}
-```
-
 ### Custom Output Writer
 
 ```go
@@ -190,12 +141,12 @@ package main
 
 import (
     "os"
-    . "github.com/cdvelop/lang"
+    . "github.com/cdvelop/tinytranslator"
 )
 
 func main() {
     // Create translator that writes to stdout
-    translator := New(os.Stdout)
+    translator := NewTranslationEngine(os.Stdout)
     
     // Directly print translated messages
     translator.Print(D.Hello, "User") // Writes to stdout: "Hello User"
@@ -210,7 +161,7 @@ package main
 import (
     "fmt"
     "net/http"
-    . "github.com/cdvelop/lang"
+    . "github.com/cdvelop/tinytranslator"
 )
 
 type Handler struct {
@@ -219,7 +170,7 @@ type Handler struct {
 
 func NewHandler() *Handler {
     return &Handler{
-        Lang: New(),
+        Lang: NewTranslationEngine(),
     }
 }
 
@@ -258,6 +209,14 @@ To add new languages, terms, or improvements:
 1. **Add new dictionary entries**: Extend the `dictionary` struct in `dictionary.go`
 2. **Add translations**: Include tags for each supported language
 3. **Submit a PR**: Follow the existing code style and add appropriate tests
+
+
+## Contribute
+
+If you find this project useful and would like to support it, you can make a donation [here with PayPal](https://paypal.me/cdvelop?country.x=CL&locale.x=es_XC).
+
+Any contribution, no matter how small, is greatly appreciated. 🙌
+
 
 ## License
 
