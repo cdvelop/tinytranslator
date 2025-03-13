@@ -1,108 +1,136 @@
 package tinytranslator_test
 
 import (
+	"sync"
 	"testing"
 
 	. "github.com/cdvelop/tinytranslator"
 )
 
+// Constantes para los mensajes esperados
+var (
+	expectedEnLanguage     = "language"
+	expectedEsLanguage     = "idioma"
+	expectedEnNotSupported = "not supported"
+	expectedEsNotSupported = "no soportado"
+)
+
 // Test that the dictionary D has been initialized with snake_case values.
-func TestDictionaryInitialization(t *testing.T) {
-	// Create a Lang instance to force dictionary initialization.
-	_ = NewTranslationEngine()
+func TestConcurrentAccess(t *testing.T) {
+	var wg sync.WaitGroup
+	iterations := 100
+	translator := NewTranslationEngine()
 
-	// Test known fields. Assuming dictionary type has these fields.
-	// If the dictionary type has more or different fields, adjust expected values as needed.
-
-	// Use reflection here if the fields are not exported.
-	// For this test we assume the dictionary fields are accessible.
-
-	if D.Language != "language" {
-		t.Errorf("D.Language = %q; want %q", D.Language, "language")
+	type result struct {
+		got, expected, lang string
 	}
-	if D.NotSupported != "not_supported" {
-		t.Errorf("D.NotSupported = %q; want %q", D.NotSupported, "not_supported")
+	resultChan := make(chan result, iterations*2)
+
+	for i := 0; i < iterations; i++ {
+		wg.Add(2)
+
+		go func() {
+			defer wg.Done()
+			got := translator.T("en", D.Language, "test", D.NotSupported)
+			expectedMsg := expectedEnLanguage + " test " + expectedEnNotSupported
+			resultChan <- result{got, expectedMsg, "English"}
+		}()
+
+		go func() {
+			defer wg.Done()
+			got := translator.T("es", D.Language, "test", D.NotSupported)
+			expectedMsg := expectedEsLanguage + " test " + expectedEsNotSupported
+			resultChan <- result{got, expectedMsg, "Spanish"}
+		}()
+	}
+
+	wg.Wait()
+	close(resultChan)
+
+	for r := range resultChan {
+		if r.got != r.expected {
+			t.Errorf("\n%s translation \ngot: %q\nwant: %q", r.lang, r.got, r.expected)
+		}
 	}
 }
 
-const expectedEnLanguage = "language"
-const expectedEnNotSupported = "not supported"
+// testWriter implements the writer interface for testing
+type testWriter struct {
+	write func(p []byte) (n int, err error)
+}
 
-const expectedEsLanguage = "idioma"
-const expectedEsNotSupported = "no soportado"
+func (w testWriter) Write(p []byte) (n int, err error) {
+	return w.write(p)
+}
 
-// Test concurrent use of Lang with translations to English and Spanish.
-func TestConcurrentSetDefaultLanguage(t *testing.T) {
+func TestConcurrentPrint(t *testing.T) {
+	var wg sync.WaitGroup
+	iterations := 100
 
-	iterations := 100 // Aumentamos el número de iteraciones
-	// var wg sync.WaitGroup
-	langInst1 := NewTranslationEngine()
-	langInst2 := NewTranslationEngine()
+	// Custom writer to capture output
+	var mu sync.Mutex
+	var outputs []string
+	customWriter := testWriter{
+		write: func(p []byte) (int, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			outputs = append(outputs, string(p))
+			return len(p), nil
+		},
+	}
 
-	for range iterations {
-		// Test English translation concurrently
-		// wg.Add(2) // Agregamos 2 porque lanzamos 2 goroutines
+	translator := NewTranslationEngine("en", customWriter)
+
+	for i := 0; i < iterations; i++ {
+		wg.Add(2)
 
 		go func() {
-			// defer wg.Done()
-			if err := langInst1.SetDefaultLanguage("en"); err != nil {
-				t.Errorf("langInst1 SetDefaultLanguage(en) error: %v", err)
-				return
-			}
+			defer wg.Done()
+			translator.Print(D.Language, "test", D.NotSupported)
+		}()
+
+		go func() {
+			defer wg.Done()
+			translator.Print("es", D.Language, "test", D.NotSupported)
+		}()
+	}
+
+	wg.Wait()
+
+	// Ensure we have the expected number of outputs
+	if len(outputs) != iterations*2 {
+		t.Errorf("Expected %d outputs, got %d", iterations*2, len(outputs))
+	}
+}
+
+func TestConcurrentIndividualInstances(t *testing.T) {
+	var wg sync.WaitGroup
+	iterations := 100
+
+	langInst1 := NewTranslationEngine("en")
+	langInst2 := NewTranslationEngine("es")
+
+	for i := 0; i < iterations; i++ {
+		wg.Add(2)
+
+		go func() {
+			defer wg.Done()
 			got := langInst1.T(D.Language, "test", D.NotSupported)
 			expectedMsg := expectedEnLanguage + " test " + expectedEnNotSupported
 			if got != expectedMsg {
-				assertTranslation(t, got, expectedMsg, "English")
+				t.Errorf("\nEnglish translation \ngot: %q\nwant: %q", got, expectedMsg)
 			}
 		}()
 
 		go func() {
-			// defer wg.Done()
-			if err := langInst2.SetDefaultLanguage("es"); err != nil {
-				t.Errorf("langInst2 SetDefaultLanguage(es) error: %v", err)
-				return
-			}
+			defer wg.Done()
 			got := langInst2.T(D.Language, "test", D.NotSupported)
 			expectedMsg := expectedEsLanguage + " test " + expectedEsNotSupported
 			if got != expectedMsg {
-				assertTranslation(t, got, expectedMsg, "Spanish")
+				t.Errorf("\nSpanish translation \ngot: %q\nwant: %q", got, expectedMsg)
 			}
 		}()
 	}
 
-	// wg.Wait() // Esperamos a que todas las goroutines terminen
-}
-
-func TestConcurrentIndividualSetLanguage(t *testing.T) {
-	iterations := 1000
-	// var wg sync.WaitGroup
-	langInst := NewTranslationEngine()
-
-	for range iterations {
-		// wg.Add(2)
-
-		go func() {
-			// defer wg.Done()
-			got := langInst.T("en", D.Language, "test", D.NotSupported)
-			expectedMsg := expectedEnLanguage + " test " + expectedEnNotSupported
-			assertTranslation(t, got, expectedMsg, "English")
-		}()
-
-		go func() {
-			// defer wg.Done()
-			got := langInst.T("es", D.Language, "test", D.NotSupported)
-			expectedMsg := expectedEsLanguage + " test " + expectedEsNotSupported
-			assertTranslation(t, got, expectedMsg, "Spanish")
-		}()
-	}
-
-	// wg.Wait()
-}
-
-// Helper function to create error messages for translation tests
-func assertTranslation(t *testing.T, got, expected, lang string) {
-	t.Helper()
-	if got != expected {
-		t.Errorf("\n%s translation \ngot: %q\nwant: %q", lang, got, expected)
-	}
+	wg.Wait()
 }

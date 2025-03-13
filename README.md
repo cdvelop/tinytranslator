@@ -1,4 +1,4 @@
-# Go Translation Library
+# Go Translation Library - TinyTranslator
 
 <div align="center">
     <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT">
@@ -8,7 +8,7 @@
 
 ## Overview
 
-The Go Translation Library provides a simple, powerful way to handle multilingual text in Go applications. It features a built-in dictionary with translations for common terms across multiple languages, making it easy to create applications that support users worldwide.
+TinyTranslator provides a simple, powerful way to handle multilingual text in Go applications. It features a built-in dictionary with translations for common terms across multiple languages, making it easy to create applications that support users worldwide.
 
 ### Key Features
 
@@ -43,25 +43,26 @@ func main() {
     msg := translator.T(D.Hello, D.World)
     fmt.Println(msg) // Output: "bonjour monde"
     
-    // Change language to Portuguese
-    translator.SetDefaultLanguage("pt")
-    
-    // Get translated text in Portuguese
-    msg = translator.T(D.Hello, D.World)
-    fmt.Println(msg) // Output: "olá mundo"
+    // Translate with explicit language (overrides default)
+    msg = translator.T("es", D.Hello, D.World)
+    fmt.Println(msg) // Output: "hola mundo"
     
     // Combine translations with variables
     username := "John"
     greeting := translator.T(D.Hello, username)
-    fmt.Println(greeting) // Output: "olá John"
+    fmt.Println(greeting) // Output: "bonjour John"
+    
+    // Create translated error messages
+    err := translator.Err(D.Email, D.NotValid)
+    fmt.Println(err.Error()) // Output: "email non valide"
 }
 ```
 
 ## Core Components
 
-### Lang Type
+### Translator Type
 
-The `Lang` struct is the central component that handles translations:
+The `Translator` struct is the central component that handles translations:
 
 - **Default language**: Configurable fallback language
 - **Translation lookup**: Efficient key-based translation retrieval
@@ -82,31 +83,27 @@ D.NotSupported // "not supported" in English, "no soportado" in Spanish, etc.
 ### Creating a Translator
 
 ```go
-// Basic initialization with default settings
+// Basic initialization with English as default language
 translator := NewTranslationEngine()
 
+// With Spanish as default language
+translator := NewTranslationEngine("es") 
+
+// With custom writer
+customWriter := MyCustomWriter{}
+translator := NewTranslationEngine(customWriter)
+
 // With custom writer and default language
-translator := NewTranslationEngine(os.Stdout, "es")
-
-```
-
-### Setting Default Language
-
-```go
-// Set default language to Spanish
-err := translator.SetDefaultLanguage("es")
-if err != nil {
-    // Handle error - language not supported
-}
+translator := NewTranslationEngine("fr", customWriter)
 ```
 
 ### Translating Text
 
 ```go
-// Basic translation
+// Basic translation (in default language)
 text := translator.T(D.Hello)
 
-// Specify language for this translation only
+// Specify language for this translation only (first argument as language code)
 text := translator.T("fr", D.Hello) // French
 
 // Combine multiple terms
@@ -144,9 +141,17 @@ import (
     . "github.com/cdvelop/tinytranslator"
 )
 
+// Define a custom writer that implements the writer interface
+type ConsoleWriter struct{}
+
+func (c ConsoleWriter) Write(p []byte) (n int, err error) {
+    return os.Stdout.Write(p)
+}
+
 func main() {
     // Create translator that writes to stdout
-    translator := NewTranslationEngine(os.Stdout)
+    writer := ConsoleWriter{}
+    translator := NewTranslationEngine(writer)
     
     // Directly print translated messages
     translator.Print(D.Hello, "User") // Writes to stdout: "Hello User"
@@ -165,12 +170,12 @@ import (
 )
 
 type Handler struct {
-    Lang *Lang
+    *Translator
 }
 
 func NewHandler() *Handler {
     return &Handler{
-        Lang: NewTranslationEngine(),
+        Translator: NewTranslationEngine(),
     }
 }
 
@@ -179,10 +184,26 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
     lang := r.URL.Query().Get("lang")
     
     // Respond in requested language
-    msg := h.Lang.T(lang, D.Hello, "User")
+    msg := h.T(lang, D.Hello, "User")
     fmt.Fprintf(w, msg)
 }
 ```
+
+## How It Works
+
+The dictionary is defined as a struct with tags for each supported language (dictionary.go):
+
+```go
+type dictionary struct {
+    Hello      string `es:"hola" fr:"bonjour" pt:"olá" de:"hallo"`
+    World      string `es:"mundo" fr:"monde" pt:"mundo" de:"welt"`
+    Language   string `es:"idioma" fr:"langue" pt:"idioma" de:"sprache"`
+    NotSupported string `es:"no soportado" fr:"non supporté" pt:"não suportado" de:"nicht unterstützt"`
+    // Add more entries as needed
+}
+```
+
+Each field is automatically converted to snake_case for use as the English translation key. The struct tags define translations for other languages.
 
 ## Supported Languages
 
@@ -210,13 +231,11 @@ To add new languages, terms, or improvements:
 2. **Add translations**: Include tags for each supported language
 3. **Submit a PR**: Follow the existing code style and add appropriate tests
 
-
-## Contribute
+## Donate
 
 If you find this project useful and would like to support it, you can make a donation [here with PayPal](https://paypal.me/cdvelop?country.x=CL&locale.x=es_XC).
 
 Any contribution, no matter how small, is greatly appreciated. 🙌
-
 
 ## License
 
