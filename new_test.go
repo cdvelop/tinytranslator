@@ -26,7 +26,7 @@ func TestConcurrentAccess(t *testing.T) {
 	}
 	resultChan := make(chan result, iterations*2)
 
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		wg.Add(2)
 
 		go func() {
@@ -81,7 +81,7 @@ func TestConcurrentPrint(t *testing.T) {
 
 	translator := NewTranslationEngine("en", customWriter)
 
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		wg.Add(2)
 
 		go func() {
@@ -110,7 +110,7 @@ func TestConcurrentIndividualInstances(t *testing.T) {
 	langInst1 := NewTranslationEngine("en")
 	langInst2 := NewTranslationEngine("es")
 
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		wg.Add(2)
 
 		go func() {
