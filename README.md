@@ -183,6 +183,7 @@ func main() {
 ### In Web Handlers
 
 ```go
+
 package main
 
 import (
@@ -197,7 +198,7 @@ type Handler struct {
 
 func NewHandler() *Handler {
     return &Handler{
-        // Create a translator that automatically uses the browser's language
+        // Create a translator that automatically uses the browser's language in webAssembly (//go: build wasm)
         Translator: func() *Translator {
             t, _ := NewTranslationEngine().WithCurrentDeviceLanguage()
             return t
