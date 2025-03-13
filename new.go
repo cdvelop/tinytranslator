@@ -148,6 +148,39 @@ func NewTranslationEngine(params ...any) *Translator {
 	return &l
 }
 
+// WithCurrentDeviceLanguage sets the translator to use the system's current language.
+//
+// It automatically detects the user's preferred language from the operating system
+// (in backend) or from the browser (in WebAssembly/frontend) and sets it as the
+// default language if it's supported.
+//
+// If the detected language is not supported, it falls back to English.
+//
+// Returns:
+//   - *Translator: The same translator instance to allow method chaining
+//   - error: An error if the language detection failed
+//
+// Example usage:
+//
+//	// Create a translator with system language
+//	translator := NewTranslationEngine().WithCurrentDeviceLanguage()
+func (l *Translator) WithCurrentDeviceLanguage() (*Translator, error) {
+	// Get current language from OS or browser
+	langCode, err := getCurrentSystemLanguage()
+	if err != nil {
+		return l, err
+	}
+
+	// Try to set the detected language
+	err = l.setDefaultLanguage(langCode)
+	if err != nil {
+		// If not supported, silently fall back to English
+		l.defaultLang = "en"
+	}
+
+	return l, nil
+}
+
 // setDefaultLanguage sets the default language
 func (l *Translator) setDefaultLanguage(language string) error {
 

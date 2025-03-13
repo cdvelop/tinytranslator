@@ -18,6 +18,7 @@ TinyTranslator provides a simple, powerful way to handle multilingual text in Go
 - ⚠️ **Integrated error handling** with translated messages
 - 🧵 **Zero external dependencies**
 - 💻 **Compatible with both backend and WebAssembly** applications
+- 🔍 **Automatic language detection** from OS or browser
 
 ## Installation
 
@@ -95,6 +96,27 @@ translator := NewTranslationEngine(customWriter)
 
 // With custom writer and default language
 translator := NewTranslationEngine("fr", customWriter)
+
+// Using system language (OS or browser)
+translator, err := NewTranslationEngine().WithCurrentDeviceLanguage()
+```
+
+### System Language Detection
+
+```go
+// Create a translator that automatically uses the system's language
+translator, err := NewTranslationEngine().WithCurrentDeviceLanguage()
+if err != nil {
+    // Handle error (falls back to English)
+}
+
+// With custom writer and system language
+customWriter := MyCustomWriter{}
+translator, err := NewTranslationEngine(customWriter).WithCurrentDeviceLanguage()
+
+// Works seamlessly in both backend and WebAssembly environments
+// - In backend: Detects OS language from environment variables
+// - In WebAssembly: Detects browser language from navigator.language
 ```
 
 ### Translating Text
@@ -175,12 +197,16 @@ type Handler struct {
 
 func NewHandler() *Handler {
     return &Handler{
-        Translator: NewTranslationEngine(),
+        // Create a translator that automatically uses the browser's language
+        Translator: func() *Translator {
+            t, _ := NewTranslationEngine().WithCurrentDeviceLanguage()
+            return t
+        }(),
     }
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-    // Get language from request (query, header, cookie, etc.)
+    // Optional: Override with language from query, header, or cookie
     lang := r.URL.Query().Get("lang")
     
     // Respond in requested language
@@ -204,6 +230,10 @@ type dictionary struct {
 ```
 
 Each field is automatically converted to snake_case for use as the English translation key. The struct tags define translations for other languages.
+
+For automatic language detection, the library uses:
+- In backend applications: Environment variables (LANG, LANGUAGE, etc.)
+- In WebAssembly applications: Browser's navigator.language API
 
 ## Supported Languages
 
